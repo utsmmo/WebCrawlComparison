@@ -2,9 +2,11 @@
 
 export interface User {
   id: string;
-  email: string;
+  username: string; // Changed from email to username
+  password?: string; // Added password
   role: "admin" | "member";
   name: string;
+  email?: string; // Optional for backward compatibility if needed
 }
 
 export interface Group {
@@ -38,8 +40,14 @@ export interface PriceSnapshot {
 }
 
 export const mockUsers: User[] = [
-  { id: "1", email: "admin@joyon.com", role: "admin", name: "Admin User" },
-  { id: "2", email: "member@joyon.com", role: "member", name: "Member User" },
+  // Admin users
+  { id: "1", username: "Admin", password: "Admin123", role: "admin", name: "Admin" },
+  { id: "2", username: "Manager", password: "Joyon123", role: "admin", name: "Manager" },
+  // Member users
+  { id: "3", username: "Sang", password: "Sang", role: "member", name: "Sang" },
+  { id: "4", username: "Nhu", password: "Nhu1", role: "member", name: "Nhu" },
+  { id: "5", username: "Ngoc", password: "Ngoc2", role: "member", name: "Ngọc" },
+  { id: "6", username: "Lananh", password: "Lananh", role: "member", name: "Lan Anh" },
 ];
 
 export const mockGroups: Group[] = [

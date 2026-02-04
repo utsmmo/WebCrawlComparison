@@ -20,11 +20,12 @@ export const PRICE_TREND = {
 } as const;
 
 export const API_CONFIG = {
-    BASE_URL: "/api",
+    BASE_URL: "https://myapi.joyon.asia",
     TIMEOUT: 30000,
     REGIONS: [
         { slug: "myhotel", name: "Khách sạn của tôi" },
         { slug: "hoi-an", name: "Hội An" },
+        { slug: "hoi-an-5-6", name: "Hội An 5,6" },
         { slug: "da-nang", name: "Đà Nẵng" },
         { slug: "da-lat", name: "Đà Lạt" },
         { slug: "nha-trang", name: "Nha Trang" },

@@ -52,6 +52,7 @@ const COMPETITORS_KEY = "joyon_competitors";
 
 const DEFAULT_GROUPS: Group[] = [
   { id: "hoi-an", name: "Hội An", location: "Hội An, Quảng Nam", createdAt: "2026-01-01" },
+  { id: "hoi-an-5-6", name: "Hội An 5,6", location: "Hội An, Quảng Nam", createdAt: "2026-02-03" },
   { id: "da-nang", name: "Đà Nẵng", location: "Đà Nẵng", createdAt: "2026-01-01" },
   { id: "da-lat", name: "Đà Lạt", location: "Đà Lạt, Lâm Đồng", createdAt: "2026-01-01" },
   { id: "nha-trang", name: "Nha Trang", location: "Nha Trang, Khánh Hòa", createdAt: "2026-01-01" },
@@ -61,7 +62,20 @@ const DEFAULT_GROUPS: Group[] = [
 function loadGroups(): Group[] {
   try {
     const data = localStorage.getItem(GROUPS_KEY);
-    if (data) return JSON.parse(data);
+    if (data) {
+      const storedGroups: Group[] = JSON.parse(data);
+      // Merge logic: Add any default group that is missing from stored groups
+      const missingDefaults = DEFAULT_GROUPS.filter(def =>
+        !storedGroups.some(stored => stored.id === def.id)
+      );
+
+      if (missingDefaults.length > 0) {
+        const merged = [...storedGroups, ...missingDefaults];
+        localStorage.setItem(GROUPS_KEY, JSON.stringify(merged));
+        return merged;
+      }
+      return storedGroups;
+    }
   } catch (e) {
     console.error("Failed to load groups:", e);
   }
@@ -87,19 +101,62 @@ function loadCompetitors(): Competitor[] {
 // Component
 // ============================================================================
 
+import { saveCompetitorConfig, CompetitorConfigPayload } from "@/app/lib/api";
+
+// ... (keep existing imports)
+
 export function GroupManagement() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [groupName, setGroupName] = useState("");
   const [groupLocation, setGroupLocation] = useState("");
+  const [jsonPreview, setJsonPreview] = useState<string | null>(null);
 
   useEffect(() => {
     setGroups(loadGroups());
     setCompetitors(loadCompetitors());
   }, []);
+
+  const handleSaveToServer = async () => {
+    // Transform local state to API payload
+    const payload: CompetitorConfigPayload[] = groups.map(group => {
+      const groupCompetitors = competitors.filter(c => c.groupId === group.id);
+
+      return {
+        Id: group.id,
+        Group: group.name,
+        MyHotels: groupCompetitors
+          .filter(c => c.isMyHotel)
+          .map(c => ({ Id: c.hotelId, Name: c.name })),
+        Competitors: groupCompetitors
+          .filter(c => !c.isMyHotel)
+          .map(c => ({ Id: c.hotelId, Name: c.name }))
+      };
+    });
+
+    setJsonPreview(JSON.stringify(payload, null, 2));
+  };
+
+  const confirmSave = async () => {
+    if (!jsonPreview) return;
+
+    try {
+      setIsSaving(true);
+      const payload = JSON.parse(jsonPreview);
+      await saveCompetitorConfig(payload);
+      toast.success("Đã lưu cấu hình lên máy chủ thành công!");
+      setJsonPreview(null);
+    } catch (error) {
+      console.error("Save config error:", error);
+      toast.error("Lỗi khi lưu cấu hình: " + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const resetForm = () => {
     setGroupName("");
@@ -185,13 +242,23 @@ export function GroupManagement() {
           </h1>
           <p className="text-gray-500 mt-1">Cấu hình các cụm khách sạn đối thủ theo khu vực địa lý</p>
         </div>
-        <Button
-          onClick={handleOpenCreate}
-          className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 border-none rounded-xl shadow-lg shadow-indigo-200 h-11 px-6 active:scale-95 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Tạo nhóm mới
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            onClick={handleSaveToServer}
+            disabled={isSaving}
+            variant="outline"
+            className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 h-11 px-6 font-bold"
+          >
+            {isSaving ? "Đang lưu..." : "Lưu cấu hình"}
+          </Button>
+          <Button
+            onClick={handleOpenCreate}
+            className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 border-none rounded-xl shadow-lg shadow-indigo-200 h-11 px-6 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Tạo nhóm mới
+          </Button>
+        </div>
       </motion.div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -243,8 +310,31 @@ export function GroupManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* JSON Preview Dialog */}
+      <Dialog open={!!jsonPreview} onOpenChange={(open) => !open && setJsonPreview(null)}>
+        <DialogContent className="rounded-3xl border-none shadow-2xl max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold font-display">Xác nhận cấu hình JSON</DialogTitle>
+            <DialogDescription>
+              Kiểm tra định dạng JSON sẽ gửi lên server (Khách sạn và Đối thủ theo khu vực).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">
+              {jsonPreview}
+            </pre>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="ghost" onClick={() => setJsonPreview(null)}>Hủy</Button>
+            <Button onClick={confirmSave} disabled={isSaving}>
+              {isSaving ? "Đang gửi..." : "Gửi Test JSON"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog >
+
       {/* Groups Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      < div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" >
         <AnimatePresence>
           {groupsWithStats.map((group, i) => (
             <motion.div
@@ -314,10 +404,10 @@ export function GroupManagement() {
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      </div >
 
       {/* Detailed Table View */}
-      <Card className="shadow-lg border-none overflow-hidden bg-white">
+      < Card className="shadow-lg border-none overflow-hidden bg-white" >
         <CardHeader className="bg-gray-50/30 px-6 py-5 border-b border-gray-100">
           <CardTitle className="text-lg font-display">Bảng chi tiết các nhóm</CardTitle>
           <CardDescription>Danh sách đầy đủ thông tin kỹ thuật của các nhóm</CardDescription>
@@ -373,7 +463,7 @@ export function GroupManagement() {
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
-    </div>
+      </Card >
+    </div >
   );
 }

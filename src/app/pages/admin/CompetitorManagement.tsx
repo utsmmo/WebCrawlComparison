@@ -36,9 +36,10 @@ import {
   AlertDialogTitle,
 } from "@/app/components/ui/alert-dialog";
 import { Badge } from "@/app/components/ui/badge";
-import { Plus, Pencil, Trash2, Search, Filter, Globe, MapPin, Hotel } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Filter, Globe, MapPin, Hotel, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
+import { getCompetitorPrices } from "@/app/lib/api";
 
 // ============================================================================
 // Types
@@ -69,6 +70,7 @@ const GROUPS_KEY = "joyon_groups";
 // Default groups
 const DEFAULT_GROUPS: Group[] = [
   { id: "hoi-an", name: "Hội An", location: "Hội An, Quảng Nam" },
+  { id: "hoi-an-5-6", name: "Hội An 5,6", location: "Hội An, Quảng Nam" },
   { id: "da-nang", name: "Đà Nẵng", location: "Đà Nẵng" },
   { id: "da-lat", name: "Đà Lạt", location: "Đà Lạt, Lâm Đồng" },
   { id: "nha-trang", name: "Nha Trang", location: "Nha Trang, Khánh Hòa" },
@@ -77,11 +79,31 @@ const DEFAULT_GROUPS: Group[] = [
 
 // Default competitors (sample data)
 const DEFAULT_COMPETITORS: Competitor[] = [
+  // Old Data
   { id: "1", hotelId: "beach-front-thanh-pho-hoi-an", name: "Beachfront Hotel Hoi An", groupId: "hoi-an", isMyHotel: false, createdAt: "2026-01-01" },
   { id: "2", hotelId: "la-alba-villa", name: "La ALBA Beach Villa", groupId: "hoi-an", isMyHotel: false, createdAt: "2026-01-01" },
   { id: "3", hotelId: "thien-thanh", name: "Old Town Hotel", groupId: "hoi-an", isMyHotel: true, createdAt: "2026-01-01" },
   { id: "4", hotelId: "raon-danang-beach-danang", name: "Raon Danang Beach", groupId: "da-nang", isMyHotel: true, createdAt: "2026-01-01" },
   { id: "5", hotelId: "sala-danang-beach", name: "Sala Danang Beach Hotel", groupId: "da-nang", isMyHotel: false, createdAt: "2026-01-01" },
+
+  // Hội An 5,6 Batch
+  { id: "101", hotelId: "golf-hoi-an", name: "ÊMM Hotel Hoi An", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "102", hotelId: "dubai-villa-hoi-an", name: "Ancient Haven - Central Boutique Hotel", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "103", hotelId: "royal-riverside-hoian", name: "Royal Riverside Hoi An Hotel & Spa", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "104", hotelId: "central-boutique-villa", name: "Central Boutique Villa , in old Town", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "105", hotelId: "little-hoi-an-boutique-resort-spa", name: "Little Hoi An . A Boutique Hotel & Spa", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "106", hotelId: "aman-boutique", name: "DE VIVRE HOI AN - Aman Boutique Hotel", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "107", hotelId: "thuy-duong-3-boutique-amp-spa", name: "ANNAM HERITAGE Boutique Hotel & Spa", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "108", hotelId: "hoi-an-silk-boutique-and-spa", name: "Silkotel Hoi An", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "109", hotelId: "yzistel-hoi-an", name: "Yzistel Hoi An", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "110", hotelId: "hoianan", name: "Hoianan Boutique Hotel", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "111", hotelId: "thanh-binh-riverside", name: "Thanh Binh Riverside Hoi An", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "112", hotelId: "river-suites-hoi-an", name: "River Suites Hoi An", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "113", hotelId: "silk-eco-hotel-hoi-an", name: "Mulberry Collection Silk Eco", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "114", hotelId: "lion-king-thanh-pho-hoi-an", name: "Lion King Hotel", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "115", hotelId: "la-charm-hoi-an-amp-spa", name: "La Charm Hoi An Hotel & Spa", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "116", hotelId: "thien-thanh", name: "Old Town Hotel", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
+  { id: "117", hotelId: "thien-trung-hoi-an", name: "Sala Hoi An Hotel", groupId: "hoi-an-5-6", isMyHotel: false, createdAt: "2026-02-03" },
 ];
 
 function loadCompetitors(): Competitor[] {
@@ -175,11 +197,24 @@ export function CompetitorManagement() {
       return;
     }
 
+    // Check for duplicate hotelId
+    const trimmedHotelId = hotelId.trim();
+    const duplicateExists = competitors.some(c =>
+      c.hotelId === trimmedHotelId &&
+      c.groupId === selectedGroup &&
+      (!editingCompetitor || c.id !== editingCompetitor.id)
+    );
+
+    if (duplicateExists) {
+      toast.error(`Hotel ID "${trimmedHotelId}" đã tồn tại trong nhóm này!`);
+      return;
+    }
+
     if (editingCompetitor) {
       // Update existing
       const updated = competitors.map(c =>
         c.id === editingCompetitor.id
-          ? { ...c, hotelId: hotelId.trim(), name: competitorName.trim(), groupId: selectedGroup, isMyHotel }
+          ? { ...c, hotelId: trimmedHotelId, name: competitorName.trim(), groupId: selectedGroup, isMyHotel }
           : c
       );
       setCompetitors(updated);
@@ -189,7 +224,7 @@ export function CompetitorManagement() {
       // Add new
       const newCompetitor: Competitor = {
         id: Date.now().toString(),
-        hotelId: hotelId.trim(),
+        hotelId: trimmedHotelId,
         name: competitorName.trim(),
         groupId: selectedGroup,
         isMyHotel,
@@ -246,13 +281,29 @@ export function CompetitorManagement() {
           </h1>
           <p className="text-gray-500 mt-1">Thêm, sửa, xóa các khách sạn đối thủ cần theo dõi giá</p>
         </div>
-        <Button
-          className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 border-none rounded-xl shadow-lg shadow-indigo-200 h-11 px-6"
-          onClick={handleOpenAdd}
-        >
-          <Plus className="w-4 h-4" />
-          <span className="font-bold">Thêm đối thủ</span>
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-xl h-11 px-4"
+            onClick={() => {
+              if (confirm("Bạn có chắc muốn reset dữ liệu về mặc định? Dữ liệu hiện tại sẽ bị mất.")) {
+                localStorage.setItem("joyon_competitors", JSON.stringify(DEFAULT_COMPETITORS));
+                localStorage.setItem("joyon_groups", JSON.stringify(DEFAULT_GROUPS));
+                window.location.reload();
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+            <span className="font-bold">Reset Mặc định</span>
+          </Button>
+          <Button
+            className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 border-none rounded-xl shadow-lg shadow-indigo-200 h-11 px-6"
+            onClick={handleOpenAdd}
+          >
+            <Plus className="w-4 h-4" />
+            <span className="font-bold">Thêm đối thủ</span>
+          </Button>
+        </div>
       </motion.div>
 
       {/* Add/Edit Dialog */}
@@ -482,6 +533,35 @@ export function CompetitorManagement() {
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-xl text-emerald-600 hover:bg-emerald-50"
+                          title="Cập nhật / Kiểm tra giá ngay"
+                          onClick={async () => {
+                            try {
+                              toast.info(`Đang kiểm tra giá cho "${competitor.name}"...`);
+                              const now = new Date();
+                              const checkin = now.toISOString().split('T')[0];
+                              // simple check for next day
+                              now.setDate(now.getDate() + 1);
+                              const checkout = now.toISOString().split('T')[0];
+
+                              const prices = await getCompetitorPrices(competitor.groupId, checkin, checkout);
+                              const match = prices.find(p => p.hotelId === competitor.hotelId);
+
+                              if (match) {
+                                toast.success(`Giá hiện tại: ${match.originalLowPrice || 'N/A'}`);
+                              } else {
+                                toast.warning("Không tìm thấy giá cho khách sạn này trong báo cáo vùng.");
+                              }
+                            } catch (e) {
+                              toast.error("Lỗi khi kiểm tra giá: " + (e as Error).message);
+                            }
+                          }}
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

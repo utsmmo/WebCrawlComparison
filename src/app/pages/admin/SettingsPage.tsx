@@ -4,7 +4,7 @@ import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Badge } from "@/app/components/ui/badge";
-import { Save, Globe, CheckCircle2, XCircle, Loader2, Server, Zap } from "lucide-react";
+import { Save, Loader2, Server } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "motion/react";
 
@@ -15,13 +15,11 @@ import { motion } from "motion/react";
 const SETTINGS_KEY = "joyon_settings";
 
 export interface AppSettings {
-    apiUrl: string;
     defaultAdults: number;
     cacheEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-    apiUrl: "https://api.datac.click",
     defaultAdults: 2,
     cacheEnabled: true,
 };
@@ -42,63 +40,22 @@ export function saveSettings(settings: AppSettings) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
-export function getApiUrl(): string {
-    return loadSettings().apiUrl;
-}
-
 // ============================================================================
 // Component
 // ============================================================================
 
 export function SettingsPage() {
     const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-    const [isTesting, setIsTesting] = useState(false);
-    const [apiStatus, setApiStatus] = useState<'unknown' | 'ok' | 'error'>('unknown');
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         setSettings(loadSettings());
     }, []);
 
-    const handleTestApi = async () => {
-        setIsTesting(true);
-        setApiStatus('unknown');
-
-        try {
-            const testUrl = `${settings.apiUrl}/api/hoi-an?checkin=2026-03-01&checkout=2026-03-02`;
-            const response = await fetch(testUrl, {
-                method: 'GET',
-                signal: AbortSignal.timeout(10000)
-            });
-
-            if (response.ok) {
-                setApiStatus('ok');
-                toast.success("Kết nối API thành công!");
-            } else {
-                setApiStatus('error');
-                toast.error(`API trả về lỗi: ${response.status}`);
-            }
-        } catch {
-            setApiStatus('error');
-            toast.error("Không thể kết nối đến API");
-        } finally {
-            setIsTesting(false);
-        }
-    };
-
     const handleSave = () => {
         setIsSaving(true);
 
-        try {
-            new URL(settings.apiUrl);
-        } catch {
-            toast.error("URL không hợp lệ!");
-            setIsSaving(false);
-            return;
-        }
-
-        const cleanUrl = settings.apiUrl.replace(/\/+$/, '');
-        const finalSettings = { ...settings, apiUrl: cleanUrl };
+        const finalSettings = { ...settings };
 
         saveSettings(finalSettings);
         setSettings(finalSettings);
@@ -131,68 +88,12 @@ export function SettingsPage() {
                             <Server className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <CardTitle className="font-display">API Configuration</CardTitle>
-                            <CardDescription>Cấu hình kết nối đến BookingRate API Server</CardDescription>
+                            <CardTitle className="font-display">System Configuration</CardTitle>
+                            <CardDescription>Cấu hình các thông số mặc định của hệ thống</CardDescription>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent className="p-6 space-y-6">
-                    <div className="space-y-3">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                            API Base URL *
-                        </Label>
-                        <div className="flex gap-3">
-                            <div className="relative flex-1">
-                                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <Input
-                                    placeholder="https://api.datac.click"
-                                    className="pl-10 h-12 rounded-xl bg-gray-50 border-gray-100 focus:bg-white text-base font-mono"
-                                    value={settings.apiUrl}
-                                    onChange={(e) => setSettings({ ...settings, apiUrl: e.target.value })}
-                                />
-                            </div>
-                            <Button
-                                variant="outline"
-                                className="h-12 px-6 rounded-xl gap-2 border-gray-200"
-                                onClick={handleTestApi}
-                                disabled={isTesting}
-                            >
-                                {isTesting ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Zap className="w-4 h-4" />
-                                )}
-                                Test
-                            </Button>
-                        </div>
-                        <p className="text-xs text-gray-400">
-                            Địa chỉ API server để crawl giá. Mặc định: <code className="bg-gray-100 px-1 rounded">https://api.datac.click</code>
-                        </p>
-
-                        {apiStatus !== 'unknown' && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={`flex items-center gap-2 p-3 rounded-xl ${apiStatus === 'ok'
-                                        ? 'bg-emerald-50 text-emerald-700'
-                                        : 'bg-red-50 text-red-700'
-                                    }`}
-                            >
-                                {apiStatus === 'ok' ? (
-                                    <>
-                                        <CheckCircle2 className="w-4 h-4" />
-                                        <span className="text-sm font-semibold">API hoạt động bình thường</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <XCircle className="w-4 h-4" />
-                                        <span className="text-sm font-semibold">Không thể kết nối API</span>
-                                    </>
-                                )}
-                            </motion.div>
-                        )}
-                    </div>
-
                     <div className="space-y-3">
                         <Label className="text-xs font-bold uppercase tracking-wider text-gray-400">
                             Số khách mặc định
