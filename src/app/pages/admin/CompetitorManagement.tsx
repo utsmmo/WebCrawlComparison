@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { getCompetitorPrices, saveCompetitorConfig, CompetitorConfigPayload } from "@/app/lib/api";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -39,7 +40,7 @@ import { Badge } from "@/app/components/ui/badge";
 import { Plus, Pencil, Trash2, Search, Filter, Globe, MapPin, Hotel, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
-import { getCompetitorPrices } from "@/app/lib/api";
+
 
 // ============================================================================
 // Types
@@ -120,6 +121,7 @@ function loadCompetitors(): Competitor[] {
 
 function saveCompetitors(competitors: Competitor[]) {
   localStorage.setItem(COMPETITORS_KEY, JSON.stringify(competitors));
+  window.dispatchEvent(new Event('local-storage-update'));
 }
 
 function loadGroups(): Group[] {
@@ -141,6 +143,7 @@ export function CompetitorManagement() {
   // Data state
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -162,6 +165,36 @@ export function CompetitorManagement() {
     setCompetitors(loadCompetitors());
     setGroups(loadGroups());
   }, []);
+
+  // Helper to auto-save to server
+  const autoSaveConfig = async (currentCompetitors: Competitor[], currentGroups: Group[]) => {
+    try {
+      setIsSaving(true);
+      // Transform local state to API payload
+      const payload: CompetitorConfigPayload[] = currentGroups.map(group => {
+        const groupCompetitors = currentCompetitors.filter(c => c.groupId === group.id);
+
+        return {
+          Id: group.id,
+          Group: group.name,
+          MyHotels: groupCompetitors
+            .filter(c => c.isMyHotel)
+            .map(c => ({ Id: c.hotelId, Name: c.name })),
+          Competitors: groupCompetitors
+            .filter(c => !c.isMyHotel)
+            .map(c => ({ Id: c.hotelId, Name: c.name }))
+        };
+      });
+
+      await saveCompetitorConfig(payload);
+      toast.success("Đã đồng bộ cấu hình lên server!");
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      toast.error("Lỗi đồng bộ server: " + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Reset form
   const resetForm = () => {
@@ -219,6 +252,7 @@ export function CompetitorManagement() {
       );
       setCompetitors(updated);
       saveCompetitors(updated);
+      autoSaveConfig(updated, groups); // Auto-save
       toast.success(`Đã cập nhật "${competitorName}"!`);
     } else {
       // Add new
@@ -233,6 +267,7 @@ export function CompetitorManagement() {
       const updated = [...competitors, newCompetitor];
       setCompetitors(updated);
       saveCompetitors(updated);
+      autoSaveConfig(updated, groups); // Auto-save
       toast.success(`Đã thêm "${competitorName}"!`);
     }
 
@@ -247,6 +282,7 @@ export function CompetitorManagement() {
     const updated = competitors.filter(c => c.id !== deleteTarget.id);
     setCompetitors(updated);
     saveCompetitors(updated);
+    autoSaveConfig(updated, groups); // Auto-save
     toast.success(`Đã xóa "${deleteTarget.name}"!`);
     setDeleteTarget(null);
   };
@@ -276,10 +312,10 @@ export function CompetitorManagement() {
         className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent font-display">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-display">
             Quản lý đối thủ
           </h1>
-          <p className="text-gray-500 mt-1">Thêm, sửa, xóa các khách sạn đối thủ cần theo dõi giá</p>
+          <p className="text-muted-foreground mt-1">Thêm, sửa, xóa các khách sạn đối thủ cần theo dõi giá</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -289,6 +325,7 @@ export function CompetitorManagement() {
               if (confirm("Bạn có chắc muốn reset dữ liệu về mặc định? Dữ liệu hiện tại sẽ bị mất.")) {
                 localStorage.setItem("joyon_competitors", JSON.stringify(DEFAULT_COMPETITORS));
                 localStorage.setItem("joyon_groups", JSON.stringify(DEFAULT_GROUPS));
+                window.dispatchEvent(new Event('local-storage-update'));
                 window.location.reload();
               }
             }}
@@ -297,7 +334,7 @@ export function CompetitorManagement() {
             <span className="font-bold">Reset Mặc định</span>
           </Button>
           <Button
-            className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 border-none rounded-xl shadow-lg shadow-indigo-200 h-11 px-6"
+            className="gap-2 h-11 px-6 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm transition-all"
             onClick={handleOpenAdd}
           >
             <Plus className="w-4 h-4" />
@@ -398,9 +435,10 @@ export function CompetitorManagement() {
               </Button>
               <Button
                 type="submit"
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 border-none rounded-xl h-11 px-8 shadow-lg shadow-indigo-200"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 border-none rounded-xl h-11 px-8 shadow-sm transition-all"
+                disabled={isSaving}
               >
-                {editingCompetitor ? "Cập nhật" : "Thêm mới"}
+                {isSaving ? "Đang lưu..." : (editingCompetitor ? "Cập nhật" : "Thêm mới")}
               </Button>
             </div>
           </form>
@@ -596,7 +634,7 @@ export function CompetitorManagement() {
                 Bấm "Thêm đối thủ" để bắt đầu theo dõi giá khách sạn.
               </p>
               <Button
-                className="mt-4 gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl"
+                className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl transition-all"
                 onClick={handleOpenAdd}
               >
                 <Plus className="w-4 h-4" />

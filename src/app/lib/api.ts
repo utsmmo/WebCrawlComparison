@@ -40,6 +40,7 @@ export interface HotelReport {
     priceReception?: string;
     originalPrice?: string;
     roomType?: string;
+    guests?: string;
     breakfast?: string;
     roomsLeft?: string;
     // All rooms for detailed view
@@ -205,97 +206,7 @@ export async function getRegionReport(
 // Mock Data Generator (Client-side)
 // ============================================================================
 
-// Hardcoded fallback data for demo (if localStorage missing)
-const FALLBACK_HOIAN_56 = [
-    { id: "101", hotelId: "golf-hoi-an", name: "ÊMM Hotel Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "102", hotelId: "dubai-villa-hoi-an", name: "Ancient Haven", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "103", hotelId: "royal-riverside-hoian", name: "Royal Riverside Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "104", hotelId: "central-boutique-villa", name: "Central Boutique Villa", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "105", hotelId: "little-hoi-an-boutique-resort-spa", name: "Little Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "106", hotelId: "aman-boutique", name: "DE VIVRE HOI AN", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "107", hotelId: "thuy-duong-3-boutique-amp-spa", name: "ANNAM HERITAGE", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "108", hotelId: "hoi-an-silk-boutique-and-spa", name: "Silkotel Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "109", hotelId: "yzistel-hoi-an", name: "Yzistel Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "110", hotelId: "hoianan", name: "Hoianan Boutique Hotel", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "111", hotelId: "thanh-binh-riverside", name: "Thanh Binh Riverside", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "112", hotelId: "river-suites-hoi-an", name: "River Suites Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "113", hotelId: "silk-eco-hotel-hoi-an", name: "Mulberry Collection Silk", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "114", hotelId: "lion-king-thanh-pho-hoi-an", name: "Lion King Hotel", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "115", hotelId: "la-charm-hoi-an-amp-spa", name: "La Charm Hoi An", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "116", hotelId: "thien-thanh", name: "Old Town Hotel", groupId: "hoi-an-5-6", isMyHotel: false },
-    { id: "117", hotelId: "thien-trung-hoi-an", name: "Sala Hoi An Hotel", groupId: "hoi-an-5-6", isMyHotel: false },
-];
 
-function generateMockDataForRegion(region: string): HotelReport[] {
-    try {
-        console.log(`[Mock] Generating data for region: ${region}`);
-        const storedCompetitors = localStorage.getItem("joyon_competitors");
-
-        let competitors: any[] = [];
-        if (storedCompetitors) {
-            try {
-                competitors = JSON.parse(storedCompetitors);
-            } catch (e) { console.error("Error parsing stored competitors", e); }
-        } else {
-            console.warn("[Mock] No competitors found in localStorage");
-        }
-
-        let regionCompetitors = competitors.filter(c => c.groupId === region);
-
-        // FALLBACK: Use hardcoded list if localStorage missed "Hội An 5,6"
-        // This ensures the demo always works for this specific request
-        if (regionCompetitors.length === 0 && (region === 'hoi-an-5-6' || region === 'hoi-an')) {
-            console.warn(`[Mock] Using HARDCODED fallback for ${region}`);
-            // If requesting generic Hoi An but empty, also fallback but filter maybe? 
-            // For now just allow the 5-6 batch to show up if 5-6 is requested.
-            if (region === 'hoi-an-5-6') regionCompetitors = FALLBACK_HOIAN_56;
-        }
-
-        console.log(`[Mock] Found ${regionCompetitors.length} competitors for region ${region}`);
-
-        if (regionCompetitors.length === 0) {
-            return [];
-        }
-
-        return regionCompetitors.map(comp => {
-            // Generate random base price between 1.5M and 4M
-            const basePrice = Math.floor(Math.random() * (4000000 - 1500000) + 1500000);
-            const priceOTA = basePrice;
-            const priceReception = basePrice * 1.1; // 10% higher
-            const priceCS = basePrice * 0.9; // 10% lower
-
-            const roomsLeft = Math.floor(Math.random() * 5) + 1; // 1-5 rooms
-            const isSoldOut = Math.random() > 0.8; // 20% chance sold out
-
-            // Random room type
-            const roomTypes = ["Deluxe Double", "Suite City View", "Superior King", "Villa Garden"];
-            const roomType = roomTypes[Math.floor(Math.random() * roomTypes.length)];
-
-            // Random breakfast
-            const breakfastOptions = ["Included", "Free", "NO", "150.000 VND"];
-            const breakfast = breakfastOptions[Math.floor(Math.random() * breakfastOptions.length)];
-
-            return {
-                hotelId: comp.hotelId,
-                hotelName: comp.name,
-                status: isSoldOut ? 'sold_out' : 'ok',
-                crawlDate: new Date().toISOString(),
-                isMyHotel: comp.isMyHotel,
-                priceOTA: isSoldOut ? undefined : priceOTA.toString(),
-                priceCS: isSoldOut ? undefined : priceCS.toString(),
-                priceReception: isSoldOut ? undefined : priceReception.toString(),
-                originalPrice: isSoldOut ? undefined : priceOTA.toString(),
-                roomType: isSoldOut ? undefined : roomType,
-                breakfast: isSoldOut ? undefined : breakfast,
-                roomsLeft: isSoldOut ? "0" : roomsLeft.toString(),
-                allRooms: []
-            };
-        });
-    } catch (e) {
-        console.error("Mock generation failed", e);
-        return [];
-    }
-}
 
 // ============================================================================
 // Unified Crawl Function
@@ -331,14 +242,16 @@ export async function crawlPrices(
         else {
             const checkin = params?.checkin || format(new Date(), 'yyyy-MM-dd');
             const checkout = params?.checkout || format(new Date(Date.now() + 86400000), 'yyyy-MM-dd');
+            const guests = params?.guests || params?.adults;
 
             // Call the new simplified API
-            const competitorData = await getCompetitorPrices(source, checkin, checkout);
+            const competitorData = await getCompetitorPrices(source, checkin, checkout, guests);
 
             // Map simplified response to HotelReport structure to maintain UI compatibility
             return competitorData.map(item => {
                 const price = parsePrice(item.originalLowPrice);
-                const isSoldOut = item.status.toLowerCase() === 'sold_out' || item.status.toLowerCase() === 'sold out';
+                const status = item.status || 'ok';
+                const isSoldOut = status.toLowerCase() === 'sold_out' || status.toLowerCase() === 'sold out';
 
                 return {
                     hotelId: item.hotelId,
@@ -353,6 +266,7 @@ export async function crawlPrices(
                     priceReception: undefined,
                     // Map additional fields from new response
                     roomType: item.roomType,
+                    guests: item.guests,
                     breakfast: item.breakfast,
                     roomsLeft: item.roomsLeft,
                     allRooms: []
@@ -416,19 +330,22 @@ export interface CompetitorPriceResponse {
 
 /**
  * Get simplified competitor price report
- * GET /api/competitor-price?id=...&checkin=...&checkout=...&adults=all
+ * GET /api/competitor-price?id=...&checkin=...&checkout=...&guests=...
  */
 export async function getCompetitorPrices(
     groupId: string,
     checkin: string,
-    checkout: string
+    checkout: string,
+    guests?: string
 ): Promise<CompetitorPriceResponse[]> {
-    const params = new URLSearchParams({
+    const queryParams: Record<string, string> = {
         id: groupId,
         checkin,
         checkout,
-        adults: 'all'
-    });
+        guests: guests || '2' // Default to 2 if not specified, user said API works with guests=4
+    };
+
+    const params = new URLSearchParams(queryParams);
 
     const url = `${getApiBase()}/api/competitor-price?${params.toString()}`;
     const response = await fetch(url);
@@ -437,6 +354,7 @@ export async function getCompetitorPrices(
         throw new Error(`Price Fetch Error: ${response.status} ${response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    return result.data || [];
 }
 

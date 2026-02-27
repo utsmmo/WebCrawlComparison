@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/app/components/ui/label";
 import { mockGroups } from "@/app/lib/mockData";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "motion/react";
 import { TrendingUp, Award, BarChart3, Calendar, MapPin, Info } from "lucide-react";
 import { APP_CONFIG } from "@/app/constants/config";
@@ -12,6 +12,37 @@ import { formatCurrency } from "@/app/lib/utils";
 export function ReportPage() {
   const [selectedGroup, setSelectedGroup] = useState("1");
   const [timeRange, setTimeRange] = useState("7");
+  const [groups, setGroups] = useState(mockGroups);
+
+  useEffect(() => {
+    const loadReportGroups = () => {
+      try {
+        const data = localStorage.getItem("joyon_groups");
+        if (data) {
+          const parsed = JSON.parse(data);
+          setGroups(parsed);
+          // Only auto-select if "1" (mock id) is currently selected to avoid overriding user intention
+          if (parsed.length > 0 && selectedGroup === "1") {
+            setSelectedGroup(parsed[0].id);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load groups:", e);
+      }
+    };
+
+    loadReportGroups();
+
+    // Listen to changes across tabs
+    window.addEventListener('storage', loadReportGroups);
+    // Listen to changes in the same window (custom event)
+    window.addEventListener('local-storage-update', loadReportGroups);
+
+    return () => {
+      window.removeEventListener('storage', loadReportGroups);
+      window.removeEventListener('local-storage-update', loadReportGroups);
+    };
+  }, [selectedGroup]);
 
   // Memoized mock data
   const priceHistoryData = useMemo(() => [
@@ -52,7 +83,7 @@ export function ReportPage() {
         <div className="flex items-center gap-3 bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-xl">
             <MapPin className="w-4 h-4 text-indigo-600" />
-            <span className="text-sm font-semibold text-indigo-900">{mockGroups.find(g => g.id === selectedGroup)?.name}</span>
+            <span className="text-sm font-semibold text-indigo-900">{groups.find(g => g.id === selectedGroup)?.name || "N/A"}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-xl">
             <Calendar className="w-4 h-4 text-purple-600" />
@@ -133,7 +164,7 @@ export function ReportPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockGroups.map((group) => (
+                  {groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                       {group.name}
                     </SelectItem>
@@ -162,7 +193,7 @@ export function ReportPage() {
                 <h4 className="text-xs font-bold uppercase tracking-wider">AI Insight</h4>
               </div>
               <p className="text-xs leading-relaxed opacity-90">
-                AI nhận thấy nhu cầu tại <span className="font-bold underline">{mockGroups.find(g => g.id === selectedGroup)?.name}</span> đang tăng trưởng mạnh.
+                AI nhận thấy nhu cầu tại <span className="font-bold underline">{groups.find(g => g.id === selectedGroup)?.name || "khu vực này"}</span> đang tăng trưởng mạnh.
                 Dự báo giá đối thủ sẽ tăng thêm 12% trong 48h tới.
               </p>
             </div>

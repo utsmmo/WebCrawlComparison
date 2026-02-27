@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Button } from "@/app/components/ui/button";
@@ -50,6 +50,7 @@ interface ProcessedHotel {
   priceCS: number;
   priceReception: number;
   roomType?: string;
+  guests?: string;
   breakfast?: string;
   roomsLeft?: string;
   difference: number;
@@ -69,6 +70,40 @@ type SortOrder = 'asc' | 'desc';
 export function PriceCheckPage() {
   // State
   const [selectedRegion, setSelectedRegion] = useState<string>("myhotel");
+  const [regions, setRegions] = useState<{ slug: string, name: string }[]>([]);
+
+  useEffect(() => {
+    const loadRegions = () => {
+      const defaultRegions = [{ slug: "myhotel", name: "Khách sạn của tôi" }];
+      try {
+        const data = localStorage.getItem("joyon_groups");
+        if (data) {
+          const parsedGroups = JSON.parse(data);
+          const mappedGroups = parsedGroups.map((g: any) => ({ slug: g.id, name: g.name }));
+          setRegions([...defaultRegions, ...mappedGroups]);
+        } else {
+          setRegions([...API_CONFIG.REGIONS]);
+        }
+      } catch (e) {
+        console.error("Failed to load custom regions:", e);
+        setRegions([...API_CONFIG.REGIONS]);
+      }
+    };
+
+    // Load initially
+    loadRegions();
+
+    // Listen to changes across tabs
+    window.addEventListener('storage', loadRegions);
+    // Listen to changes in the same window (custom event)
+    window.addEventListener('local-storage-update', loadRegions);
+
+    return () => {
+      window.removeEventListener('storage', loadRegions);
+      window.removeEventListener('local-storage-update', loadRegions);
+    };
+  }, []);
+
   const [checkInDate, setCheckInDate] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -86,7 +121,6 @@ export function PriceCheckPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [crawlProgress, setCrawlProgress] = useState(0);
   const [adults, setAdults] = useState<string>("2");
-  const [guestFilter, setGuestFilter] = useState<string>("all");
 
   // Reference price (My Hotel if found in results, else first hotel)
   const referencePrice = useMemo(() => {
@@ -154,6 +188,7 @@ export function PriceCheckPage() {
         priceCS,
         priceReception,
         roomType: hotel.roomType,
+        guests: hotel.guests,
         breakfast: hotel.breakfast,
         roomsLeft: hotel.roomsLeft,
         difference,
@@ -165,16 +200,13 @@ export function PriceCheckPage() {
     });
 
     return result;
-  }, [hotelData]); // Removed referencePrice dependency since it is used inside logic but logically memoization depends on data + ref
+  }, [hotelData, referencePrice]);
 
   // Sorted hotels
   const sortedHotels = useMemo(() => {
     return [...processedHotels]
-      .filter(h => {
-        if (guestFilter === 'all') return true;
-        const roomDesc = h.roomType || '';
-        if (guestFilter === '2') return roomDesc.includes('(2 khách)');
-        if (guestFilter === '4') return roomDesc.includes('(4 khách)');
+      .filter(() => {
+        // API now handles guest filtering, so we trust the response.
         return true;
       })
       .sort((a, b) => {
@@ -203,7 +235,7 @@ export function PriceCheckPage() {
         }
         return sortOrder === 'asc' ? aVal - (bVal as number) : (bVal as number) - aVal;
       });
-  }, [processedHotels, sortField, sortOrder, guestFilter]);
+  }, [processedHotels, sortField, sortOrder]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -241,28 +273,13 @@ export function PriceCheckPage() {
       // But for new Competitor API (Regions), it always returns the "lowest of all"
       // So we can assume efficient single call for regions.
 
-      const isLegacySource = selectedRegion === 'myhotel' || selectedRegion === 'myhotel-today';
 
-      if (isLegacySource && adults === "all") {
-        // Run two crawls for both 2 and 4 adults (Legacy behavior)
-        const [data2, data4] = await Promise.all([
-          crawlPrices(selectedRegion as CrawlSource, { checkin: checkInDate, checkout: checkOutDate, adults: "2" }),
-          crawlPrices(selectedRegion as CrawlSource, { checkin: checkInDate, checkout: checkOutDate, adults: "4" })
-        ]);
-
-        // Merge data, tagging them
-        finalData = [
-          ...data2.map(h => ({ ...h, roomType: h.roomType ? `(2 khách) ${h.roomType}` : '(2 khách)' })),
-          ...data4.map(h => ({ ...h, roomType: h.roomType ? `(4 khách) ${h.roomType}` : '(4 khách)' }))
-        ];
-      } else {
-        // Single call for specific adults OR for new Competitor API (which handles 'all' internally)
-        finalData = await crawlPrices(selectedRegion as CrawlSource, {
-          checkin: checkInDate,
-          checkout: checkOutDate,
-          adults: adults,
-        });
-      }
+      // Single call for specific adults
+      finalData = await crawlPrices(selectedRegion as CrawlSource, {
+        checkin: checkInDate,
+        checkout: checkOutDate,
+        guests: adults,
+      });
 
       setCrawlProgress(100);
       setHotelData(finalData);
@@ -385,7 +402,7 @@ export function PriceCheckPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {API_CONFIG.REGIONS.map((region) => (
+                  {regions.map((region) => (
                     <SelectItem key={region.slug} value={region.slug}>
                       <span className="flex items-center gap-2">
                         {region.slug === 'myhotel' && <Hotel className="w-4 h-4 text-indigo-500" />}
@@ -408,7 +425,6 @@ export function PriceCheckPage() {
                 <SelectContent>
                   <SelectItem value="2">2 Người lớn</SelectItem>
                   <SelectItem value="4">4 Người lớn</SelectItem>
-                  <SelectItem value="all">Tất cả</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -708,7 +724,7 @@ export function PriceCheckPage() {
                                     {hotel.roomType || '---'}
                                   </span>
                                   <span className="text-xs text-muted-foreground">
-                                    2 người lớn
+                                    {hotel.guests ? `${hotel.guests} người` : '---'}
                                   </span>
                                 </div>
                               </TableCell>

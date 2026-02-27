@@ -1,5 +1,9 @@
 # Stage 1: Build the application
-FROM node:18-alpine as builder
+# Use standard Node image (Debian) to avoid Alpine build issues
+FROM node:18 as builder
+
+# Increase memory limit for build process
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 WORKDIR /app
 

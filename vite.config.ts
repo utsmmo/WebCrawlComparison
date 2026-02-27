@@ -19,9 +19,11 @@ export default defineConfig({
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
   server: {
+    port: 5173,
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'https://api.datac.click',
+        target: 'https://myapi.joyon.asia',
         changeOrigin: true,
         secure: false,
       },

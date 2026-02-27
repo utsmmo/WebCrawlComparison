@@ -11,6 +11,16 @@ import {
   DialogTitle,
 } from "@/app/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/app/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -19,7 +29,7 @@ import {
   TableRow,
 } from "@/app/components/ui/table";
 import { Badge } from "@/app/components/ui/badge";
-import { Plus, Pencil, Trash2, MapPin, Globe, Building2, Hotel } from "lucide-react";
+import { Plus, Pencil, Trash2, MapPin, Globe, Building2, Hotel, Search, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -63,18 +73,7 @@ function loadGroups(): Group[] {
   try {
     const data = localStorage.getItem(GROUPS_KEY);
     if (data) {
-      const storedGroups: Group[] = JSON.parse(data);
-      // Merge logic: Add any default group that is missing from stored groups
-      const missingDefaults = DEFAULT_GROUPS.filter(def =>
-        !storedGroups.some(stored => stored.id === def.id)
-      );
-
-      if (missingDefaults.length > 0) {
-        const merged = [...storedGroups, ...missingDefaults];
-        localStorage.setItem(GROUPS_KEY, JSON.stringify(merged));
-        return merged;
-      }
-      return storedGroups;
+      return JSON.parse(data);
     }
   } catch (e) {
     console.error("Failed to load groups:", e);
@@ -85,6 +84,7 @@ function loadGroups(): Group[] {
 
 function saveGroups(groups: Group[]) {
   localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
+  window.dispatchEvent(new Event('local-storage-update'));
 }
 
 function loadCompetitors(): Competitor[] {
@@ -110,9 +110,10 @@ export function GroupManagement() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
   const [groupName, setGroupName] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [groupLocation, setGroupLocation] = useState("");
   const [jsonPreview, setJsonPreview] = useState<string | null>(null);
 
@@ -122,23 +123,32 @@ export function GroupManagement() {
   }, []);
 
   const handleSaveToServer = async () => {
-    // Transform local state to API payload
-    const payload: CompetitorConfigPayload[] = groups.map(group => {
-      const groupCompetitors = competitors.filter(c => c.groupId === group.id);
+    try {
+      setIsSaving(true);
+      // Transform local state to API payload
+      const payload: CompetitorConfigPayload[] = groups.map(group => {
+        const groupCompetitors = competitors.filter(c => c.groupId === group.id);
 
-      return {
-        Id: group.id,
-        Group: group.name,
-        MyHotels: groupCompetitors
-          .filter(c => c.isMyHotel)
-          .map(c => ({ Id: c.hotelId, Name: c.name })),
-        Competitors: groupCompetitors
-          .filter(c => !c.isMyHotel)
-          .map(c => ({ Id: c.hotelId, Name: c.name }))
-      };
-    });
+        return {
+          Id: group.id,
+          Group: group.name,
+          MyHotels: groupCompetitors
+            .filter(c => c.isMyHotel)
+            .map(c => ({ Id: c.hotelId, Name: c.name })),
+          Competitors: groupCompetitors
+            .filter(c => !c.isMyHotel)
+            .map(c => ({ Id: c.hotelId, Name: c.name }))
+        };
+      });
 
-    setJsonPreview(JSON.stringify(payload, null, 2));
+      await saveCompetitorConfig(payload);
+      toast.success("✅ Đã đồng bộ cấu hình lên server thành công!");
+    } catch (error) {
+      console.error("Sync failed:", error);
+      toast.error("❌ Lỗi đồng bộ: " + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const confirmSave = async () => {
@@ -160,6 +170,7 @@ export function GroupManagement() {
 
   const resetForm = () => {
     setGroupName("");
+    setGroupId("");
     setGroupLocation("");
     setEditingGroup(null);
   };
@@ -172,26 +183,58 @@ export function GroupManagement() {
   const handleOpenEdit = (group: Group) => {
     setEditingGroup(group);
     setGroupName(group.name);
+    setGroupId(group.id);
     setGroupLocation(group.location);
     setIsDialogOpen(true);
   };
 
+  // Helper to auto-save to server
+  const autoSaveConfig = async (currentGroups: Group[], currentCompetitors: Competitor[]) => {
+    try {
+      setIsSaving(true);
+      // Transform local state to API payload
+      const payload: CompetitorConfigPayload[] = currentGroups.map(group => {
+        const groupCompetitors = currentCompetitors.filter(c => c.groupId === group.id);
+
+        return {
+          Id: group.id,
+          Group: group.name,
+          MyHotels: groupCompetitors
+            .filter(c => c.isMyHotel)
+            .map(c => ({ Id: c.hotelId, Name: c.name })),
+          Competitors: groupCompetitors
+            .filter(c => !c.isMyHotel)
+            .map(c => ({ Id: c.hotelId, Name: c.name }))
+        };
+      });
+
+      await saveCompetitorConfig(payload);
+      toast.success("Đã đồng bộ cấu hình lên server!");
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      toast.error("Lỗi đồng bộ server: " + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!groupName.trim()) return;
+    if (!groupName.trim() || !groupId.trim()) return;
 
     if (editingGroup) {
       const updated = groups.map(g =>
         g.id === editingGroup.id
-          ? { ...g, name: groupName.trim(), location: groupLocation.trim() }
+          ? { ...g, id: groupId.trim(), name: groupName.trim(), location: groupLocation.trim() }
           : g
       );
       setGroups(updated);
       saveGroups(updated);
+      autoSaveConfig(updated, competitors); // Auto-save
       toast.success(`Đã cập nhật nhóm "${groupName}"!`);
     } else {
       const newGroup: Group = {
-        id: groupName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '') || Date.now().toString(),
+        id: groupId.trim(),
         name: groupName.trim(),
         location: groupLocation.trim(),
         createdAt: new Date().toISOString().split('T')[0],
@@ -199,6 +242,7 @@ export function GroupManagement() {
       const updated = [...groups, newGroup];
       setGroups(updated);
       saveGroups(updated);
+      autoSaveConfig(updated, competitors); // Auto-save
       toast.success(`Đã tạo nhóm "${groupName}" thành công!`);
     }
 
@@ -206,12 +250,28 @@ export function GroupManagement() {
     resetForm();
   };
 
-  const handleDeleteGroup = (id: string, name: string) => {
-    if (window.confirm(`Bạn có chắc muốn xóa nhóm "${name}"? Các đối thủ trong nhóm này sẽ không hiển thị vùng nữa.`)) {
-      const updated = groups.filter(g => g.id !== id);
-      setGroups(updated);
-      saveGroups(updated);
-      toast.success(`Đã xóa nhóm "${name}"`);
+  const handleDeleteGroup = async () => {
+    if (!deleteTarget) return;
+    const { id, name } = deleteTarget;
+
+    try {
+      setIsSaving(true);
+      const updatedGroups = groups.filter(g => g.id !== id);
+      const updatedCompetitors = competitors.filter(c => c.groupId !== id);
+
+      setGroups(updatedGroups);
+      setCompetitors(updatedCompetitors);
+
+      saveGroups(updatedGroups);
+      localStorage.setItem(COMPETITORS_KEY, JSON.stringify(updatedCompetitors));
+
+      await autoSaveConfig(updatedGroups, updatedCompetitors);
+      toast.success(`Đã xóa nhóm "${name}" và các đối thủ liên quan`);
+    } catch (e) {
+      toast.error("Lỗi khi xóa nhóm");
+    } finally {
+      setIsSaving(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -237,23 +297,24 @@ export function GroupManagement() {
         className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent font-display">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-display">
             Quản lý nhóm
           </h1>
-          <p className="text-gray-500 mt-1">Cấu hình các cụm khách sạn đối thủ theo khu vực địa lý</p>
+          <p className="text-muted-foreground mt-1">Cấu hình các cụm khách sạn đối thủ theo khu vực địa lý</p>
         </div>
         <div className="flex gap-3">
           <Button
             onClick={handleSaveToServer}
             disabled={isSaving}
             variant="outline"
-            className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 h-11 px-6 font-bold"
+            className="gap-2 h-11 px-6 font-semibold border-green-200 text-green-700 hover:bg-green-50"
           >
-            {isSaving ? "Đang lưu..." : "Lưu cấu hình"}
+            <RefreshCw className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+            {isSaving ? "Đang đồng bộ..." : "Đồng bộ lên server"}
           </Button>
           <Button
             onClick={handleOpenCreate}
-            className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 border-none rounded-xl shadow-lg shadow-indigo-200 h-11 px-6 active:scale-95 transition-all"
+            className="gap-2 h-11 px-6 shadow-sm active:scale-95 transition-all font-semibold"
           >
             <Plus className="w-4 h-4" />
             Tạo nhóm mới
@@ -270,6 +331,21 @@ export function GroupManagement() {
             <DialogDescription>Thêm một nhóm điểm đến mới vào hệ thống để bắt đầu theo dõi</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="group-id" className="text-xs uppercase tracking-widest font-bold text-gray-400">ID Nhóm (Mã định danh)</Label>
+              <div className="relative">
+                <Input
+                  id="group-id"
+                  placeholder="ví-dụ-hoi-an"
+                  className="h-11 rounded-xl bg-gray-50 border-gray-100 focus:bg-white transition-all shadow-sm font-mono text-sm"
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
+                  required
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">ID dùng để gọi API, nên viết liền không dấu, dùng dấu gạch ngang.</p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="group-name" className="text-xs uppercase tracking-widest font-bold text-gray-400">Tên nhóm</Label>
               <div className="relative">
@@ -333,6 +409,29 @@ export function GroupManagement() {
         </DialogContent>
       </Dialog >
 
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display font-bold text-xl">Xác nhận xóa nhóm?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm">
+              Bạn có chắc muốn xóa nhóm <strong>{deleteTarget?.name}</strong>?
+              <br />
+              Tất cả các đối thủ trong nhóm này cũng sẽ bị xóa khỏi hệ thống. Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="rounded-xl h-11 px-6 font-semibold">Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl h-11 px-8 font-bold"
+              onClick={handleDeleteGroup}
+              disabled={isSaving}
+            >
+              {isSaving ? "Đang xóa..." : "Xác nhận xóa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Groups Grid */}
       < div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" >
         <AnimatePresence>
@@ -344,17 +443,17 @@ export function GroupManagement() {
               transition={{ delay: i * 0.05 }}
               layout
             >
-              <Card className="hover:shadow-xl transition-all duration-300 border-none group overflow-hidden bg-white shadow-md relative">
-                <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 w-full" />
+              <Card className="hover:shadow-lg transition-all duration-300 group overflow-hidden bg-card shadow-sm relative">
+                <div className="h-1 bg-primary w-full" />
                 <CardHeader className="pb-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="bg-indigo-50 p-3 rounded-2xl group-hover:bg-indigo-600 transition-colors duration-300 shadow-sm border border-indigo-100/50">
-                        <MapPin className="w-5 h-5 text-indigo-600 group-hover:text-white transition-colors" />
+                      <div className="bg-secondary p-3 rounded-2xl group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300 shadow-sm">
+                        <MapPin className="w-5 h-5 text-primary group-hover:text-primary-foreground transition-colors" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl font-bold font-display text-indigo-950">{group.name}</CardTitle>
-                        <CardDescription className="text-xs font-medium text-gray-400 mt-0.5">{group.location}</CardDescription>
+                        <CardTitle className="text-xl font-bold font-display text-foreground">{group.name}</CardTitle>
+                        <CardDescription className="text-xs font-medium text-muted-foreground mt-0.5">{group.location}</CardDescription>
                       </div>
                     </div>
                   </div>
@@ -362,15 +461,15 @@ export function GroupManagement() {
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex gap-4">
-                      <div className="flex-1 p-3 bg-gray-50 rounded-2xl border border-gray-100/50">
-                        <div className="flex items-center gap-1.5 text-gray-400 mb-1">
+                      <div className="flex-1 p-3 bg-secondary/50 rounded-2xl border border-border">
+                        <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
                           <Building2 className="w-3 h-3" />
                           <span className="text-[10px] font-bold uppercase tracking-wider">Đối thủ</span>
                         </div>
-                        <p className="text-xl font-bold text-indigo-900">{group.competitorCount}</p>
+                        <p className="text-xl font-bold text-foreground">{group.competitorCount}</p>
                       </div>
-                      <div className="flex-1 p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100/30">
-                        <div className="flex items-center gap-1.5 text-emerald-500 mb-1">
+                      <div className="flex-1 p-3 bg-secondary/50 rounded-2xl border border-border">
+                        <div className="flex items-center gap-1.5 text-emerald-600 mb-1">
                           <Hotel className="w-3 h-3" />
                           <span className="text-[10px] font-bold uppercase tracking-wider">Của tôi</span>
                         </div>
@@ -382,7 +481,7 @@ export function GroupManagement() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1 gap-2 rounded-xl h-10 border-gray-100 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all font-bold text-xs uppercase tracking-wider"
+                        className="flex-1 gap-2 rounded-xl h-9 text-xs uppercase tracking-wider font-semibold"
                         onClick={() => handleOpenEdit(group)}
                       >
                         <Pencil className="w-3 h-3" />
@@ -391,8 +490,8 @@ export function GroupManagement() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="flex-1 gap-2 rounded-xl h-10 text-red-500 hover:bg-red-50 hover:text-red-600 transition-all font-bold text-xs uppercase tracking-wider"
-                        onClick={() => handleDeleteGroup(group.id, group.name)}
+                        className="flex-1 gap-2 rounded-xl h-9 text-destructive hover:bg-destructive/10 hover:text-destructive font-semibold text-xs uppercase tracking-wider"
+                        onClick={() => setDeleteTarget(group)}
                       >
                         <Trash2 className="w-3 h-3" />
                         Xóa
@@ -407,63 +506,7 @@ export function GroupManagement() {
       </div >
 
       {/* Detailed Table View */}
-      < Card className="shadow-lg border-none overflow-hidden bg-white" >
-        <CardHeader className="bg-gray-50/30 px-6 py-5 border-b border-gray-100">
-          <CardTitle className="text-lg font-display">Bảng chi tiết các nhóm</CardTitle>
-          <CardDescription>Danh sách đầy đủ thông tin kỹ thuật của các nhóm</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-gray-50/50">
-              <TableRow>
-                <TableHead className="pl-6 text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Tên nhóm</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Địa điểm</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Số đối thủ</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Phân loại</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Ngày tạo</TableHead>
-                <TableHead className="text-right pr-6 text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Thao tác</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groupsWithStats.map((group) => (
-                <TableRow key={group.id} className="hover:bg-gray-50/30 transition-colors border-gray-50 group">
-                  <TableCell className="pl-6 font-bold text-indigo-900">{group.name}</TableCell>
-                  <TableCell className="text-sm text-gray-500">{group.location}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="bg-indigo-50 text-indigo-600 border-none font-bold">
-                      {group.competitorCount} hotels
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="default" className="bg-indigo-500 font-bold uppercase text-[9px]">Region</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-gray-400 font-medium">{group.createdAt || "01/01/2026"}</TableCell>
-                  <TableCell className="text-right pr-6">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full text-indigo-600 hover:bg-indigo-50"
-                        onClick={() => handleOpenEdit(group)}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full text-red-500 hover:bg-red-50"
-                        onClick={() => handleDeleteGroup(group.id, group.name)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card >
+      {/* Detailed Table View - REMOVED */}
     </div >
   );
 }
